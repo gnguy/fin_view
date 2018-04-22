@@ -3,7 +3,7 @@
 stock_trends_ui <- function(id, symbol_map = symbol_map) { 
   ## Create a namespace function using the provided id
   ns <- NS(id)
-
+  
   symbol_choices <- sort(unique(symbol_map$display_name))
   initial_symbols <- unique(symbol_map[Symbol == "SPY", display_name])
 
@@ -13,19 +13,19 @@ stock_trends_ui <- function(id, symbol_map = symbol_map) {
         h4("Stock Trends"),
         selectizeInput(ns("sel_symbols"),
                        "Selected Symbols",
-                       choices = symbol_choices,
-                       selected = initial_symbols,
-                       server = TRUE,
-                       options = list(maxOptions = 100, maxItems = 15),
+                       choices = NULL,
+                       selected = NULL,
+                       options = list(maxItems = 15)
                        ),
-        selectInput(ns("sel_recall_period"),
+        radioButtons(ns("sel_recall_period"),
                        "History Period",
                        choices = c("1 Week",
                                    "1 Month",
                                    "3 Months",
                                    "1 Year",
                                    "5 Years",
-                                   "Max")),
+                                   "Max"),
+                       selected = "1 Year"),
         checkboxInput(ns("normalize_prices"), "Normalize Price at Start Date", FALSE),
         checkboxInput(ns("show_moving_average"), "Show Moving Averages", FALSE),
         conditionalPanel(condition = paste0("input['", ns("show_moving_average"), "'] == true"),
@@ -34,9 +34,8 @@ stock_trends_ui <- function(id, symbol_map = symbol_map) {
                                  "Moving Average Widths",
                                  choices = c(10, 20, 50, 100, 200),
                                  selected = 10,
-                                 server = TRUE,
-                                 options = list(maxItems = 2),
-                  )),
+                                 options = list(maxItems = 2))
+                  ),
         downloadButton(ns("download_data"), "Download Data"),
         bookmarkButton()
     ),
@@ -44,12 +43,10 @@ stock_trends_ui <- function(id, symbol_map = symbol_map) {
       tabsetPanel(
         tabPanel("Graph", 
                  plotlyOutput(ns("ts_graph"), height="100%"),
-                 uiOutput(ns("refresh_button_ui")),
-
-                 )
-        ),
-        tabPanel("Table", DT::dataTableOutput(ns("data_table"))),
-        tabPanel("Statistics", DT::dataTableOutput(ns("stats_table")))
+                 uiOutput(ns("refresh_button_ui"))
+                 ),
+      tabPanel("Table", DT::dataTableOutput(ns("data_table"))),
+      tabPanel("Statistics", DT::dataTableOutput(ns("stats_table")))
       )
     )
   )
@@ -62,20 +59,41 @@ stock_trends_ui <- function(id, symbol_map = symbol_map) {
 stock_trends_server <- function(input, output, session, 
                                 symbol_map,
                                 fetch_cache_symbol) {
-
-  req(input$sel_symbols)
-
+  print("server started")
+  observe({
+    req(input$sel_symbols)
+  })
+  
   ## Set reactive values to store reactive results
-  symbols_selected <- reactiveValues(value = unique(symbol_map[Symbol == "SPY", display_name])
-    
+  symbol_choices <- sort(unique(symbol_map$display_name))
+  initial_symbols <- unique(symbol_map[Symbol == "SPY", display_name])
+  
+  updateSelectizeInput(session, 'sel_symbols', choices = symbol_choices, selected = initial_symbols, server = TRUE)
+  
+  symbols_selected <- reactiveValues(value = unique(symbol_map[Symbol == "SPY", display_name]))
+
   observe({
     symbols_selected$value <- unique(symbol_map[display_name %in% input$sel_symbols, Symbol])
   })
-
+  
+  sel_mav_widths <- reactiveValues(value = 10)
+  exp_moving_average <- reactiveValues(value = TRUE)
+  
   observe({
-    if(input$exp_moving_average == FALSE) sel_mav_opts <- c(10, 20, 50, 100, 200)
-    if(input$exp_moving_average == TRUE) sel_mav_opts <- c(12, 26, 52)
-    updateSelectizeInput(session, "sel_mav_width", choices = sel_mav_opts, selected = sel_mav_opts[1])
+    print("Updating selectize")
+    
+    if(input$exp_moving_average == F) sel_mav_opts <- c(10, 20, 50, 100, 200)
+    if(input$exp_moving_average == T) sel_mav_opts <- c(12, 26, 52)
+    updateSelectizeInput(session, "sel_mav_width", choices = sel_mav_opts, selected = sel_mav_opts[1], server = TRUE)
+    sel_mav_widths$value <- sel_mav_opts[1]
+    exp_moving_average$value <- input$exp_moving_average
+    
+    print("Selectize updated")
+  })
+  
+  observe({
+    if(length(input$sel_mav_width) != 0) sel_mav_widths$value <- as.integer(input$sel_mav_width)
+    if(length(input$sel_mav_width) == 0) sel_mav_widths$value <- list()
   })
   
   stock_data <- reactive({ withProgress(message = 'Pulling data for selected stocks', value = 0, {
@@ -136,27 +154,66 @@ stock_trends_server <- function(input, output, session,
 
   formatted_prices <- reactive({
     formatted_prices <- copy(stock_data())
-    if(input$normalize_prices == T) {
-
+    
+    ## Calculate moving averages -- either simple moving average or exponential
+    ## Wrapped in !is.null conditionals to avoid T/F comparison error message on switch
+    print(formatted_prices)
+    print(sel_mav_widths$value)
+    if(length(sel_mav_widths$value > 0)) {
+      if(exp_moving_average$value == T) formatted_prices[, mav1 := EMA(Adjusted, n = sel_mav_widths$value[1]), by = "Symbol"]
+      if(exp_moving_average$value == F) formatted_prices[, mav1 := SMA(Adjusted, n = sel_mav_widths$value[1]), by = "Symbol"]
+      
+      if(length(sel_mav_widths$value) == 2) {
+        if(exp_moving_average$value == T) formatted_prices[, mav2 := EMA(Adjusted, n = sel_mav_widths$value[2]), by = "Symbol"]
+        if(exp_moving_average$value == F) formatted_prices[, mav2 := SMA(Adjusted, n = sel_mav_widths$value[2]), by = "Symbol"]
+      }
     }
+    
+    ## In Progress: Calculate % Change in last 30 days
+    # formatted_prices[, pct_change_30_day := 100 * ((Adjusted / Adjusted[Date == min(Date)]) - 1), by = "Symbol"]
 
+    ## Subset data to the start of the selected recall period
+    recall_period_map <- list("1 Week" = 7,
+                              "1 Month" = 30.5,
+                              "3 Months" = 30.5 * 3,
+                              "1 Year" = 365,
+                              "5 Years" = 365 * 5,
+                              "Max" = as.numeric(NA))
+    
+    sel_recall_period <- recall_period_map[[input$sel_recall_period]]
+    if(!is.na(sel_recall_period)) formatted_prices <- formatted_prices[Sys.Date() - Date <= sel_recall_period]
+    
+    ## Calculate % Change since start of period
+    formatted_prices[, pct_change := 100 * ((Adjusted / Adjusted[Date == min(Date)]) - 1), by = "Symbol"]
+    
+    ## Normalize stock prices to the start of the recall period
+    if(input$normalize_prices == T) {
+      print("normalizing")
+      formatted_prices[, Adjusted := Adjusted / Adjusted[Date == min(Date)], by = c("Symbol")]
+      if("mav1" %in% colnames(formatted_prices)) formatted_prices[, mav1 := mav1 / mav1[Date == min(Date)], by = c("Symbol")]
+      if("mav2" %in% colnames(formatted_prices)) formatted_prices[, mav2 := mav2 / mav2[Date == min(Date)], by = c("Symbol")]
+    }
+    
     return(formatted_prices)
   })
   
   ## Graph results over year, by different facetting variables
   output$ts_graph <- renderPlotly({
-    hovertext <- NULL
+    print(head(formatted_prices()))
+    
     if(nrow(formatted_prices()) > 0) {
-      hovertext <- paste0("paste0(",
-                          "'Outlier: ', outlier_viz, '<br>",
-                          "Adjustment RE/FE: ', adjustment_re_fe, '<br>",
-                          "Variance: ', variance, '<br>",
-                          "Microdata: ', microdata, '<br>",
-                          "NID: ', nid, '<br>",
-                          "Title: ', nid_title, '<br>",
-                          "Underlying NID: ', underlying_nid, '<br>",
-                          "Underlying Title: ', underlying_title",
-                          ")")
+      ts_graph <- ggplot() +
+                  geom_line(data = formatted_prices(), aes(x = Date, y = Adjusted, color = Symbol, label1 = Volume, label2 = pct_change)) +
+                  theme_minimal()
+      if(input$show_moving_average == T & !is.null(formatted_prices()$mav1)) {
+        ts_graph <- ts_graph + 
+          geom_line(data = formatted_prices(), aes(x = Date, y = mav1, color = Symbol), linetype = "dotdash")
+      }
+      
+      if(input$show_moving_average == T & !is.null(formatted_prices()$mav2)) {
+        ts_graph <- ts_graph + 
+          geom_line(data = formatted_prices(), aes(x = Date, y = mav2, color = Symbol), linetype = "dot")
+      }
 
       ggplotly(ts_graph)
     } else {

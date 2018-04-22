@@ -7,6 +7,8 @@ fetch_symbol <- function(symbol) {
 
 fetch_cache_symbol <- memoise(fetch_symbol, cache = cache_filesystem("~/Desktop/memoise_cache"))
 
+fetch_cache_list_symbols <- memoise(function() setDT(TTR::stockSymbols()), cache = cache_filesystem("~/Desktop/memoise_cache"))
+
 apply_ttr_method <- function(data, symbol, method) {
 	data <- data[Symbol == symbol]
 	date_vals <- data$Date
