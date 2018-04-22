@@ -59,7 +59,7 @@ stock_trends_ui <- function(id, symbol_map = symbol_map) {
 stock_trends_server <- function(input, output, session, 
                                 symbol_map,
                                 fetch_cache_symbol) {
-  print("server started")
+  print("stock trends server started")
   observe({
     req(input$sel_symbols)
   })

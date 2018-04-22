@@ -20,13 +20,12 @@ setwd("~/Documents/Git/fin_view")
 source("import_data.R")
 source("stock_trends.R")
 # source("stock_profiles.R")
-# source("inv_forecast.R")
+source("fin_forecast.R")
 
 ## Load data
 symbol_map <- fetch_cache_list_symbols()
 mutual_fund_map <- readRDS("mutual_fund_list.RData")
 etf_map <- readRDS("etf_list.Rdata")
-
 
 ## How to get TCEHY as well?
 symbol_map <- rbindlist(list(symbol_map, mutual_fund_map, etf_map), use.names = T, fill = T)
@@ -41,10 +40,10 @@ ui <- function(request) {
     theme = shinytheme("paper"),
     tabPanel("Landing Page", includeMarkdown("landing_page.md")),
     tabPanel("Stock Trends", stock_trends_ui("stock_trends",
-                             symbol_map = symbol_map))
+                             symbol_map = symbol_map)),
     # tabPanel("Stock Profiles", stock_profiles_ui("stock_profiles", 
     #                            symbol_map = symbol_map)),
-    # tabPanel("Investment Forecaster", inv_forecast_ui("inv_forecast"))
+    tabPanel("Finance Forecaster", fin_forecast_ui("fin_forecast"))
   )
 }
 
@@ -57,9 +56,7 @@ server <- function(input,output,session) {
   # callModule(stock_profiles_server, "stock_profiles",
   #                                   symbol_map = symbol_map,
   #                                   fetch_cache_symbol = fetch_cache_symbol)
-  # callModule(inv_forecast_server, "inv_forecast",
-  #                                 fetch_cache_symbol = fetch_cache_symbol)
-  
+  callModule(fin_forecast_server, "fin_forecast")
 }
 
 shinyApp(ui, server, enableBookmarking = "url")
