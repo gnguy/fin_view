@@ -260,5 +260,4 @@ stock_trends_server <- function(input, output, session,
       write.csv(master_data(), con, row.names=F)
     }
   )
-  
 }

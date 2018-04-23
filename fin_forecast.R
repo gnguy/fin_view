@@ -6,37 +6,36 @@ fin_forecast_ui <- function(id) {
   
   fluidPage(
     title = "Finance Forecasts",
-     tabsetPanel(
-       tabPanel("Inputs",
-                column(6,
-                       inputPanel(
-                         textInput(ns("overall_name"), label = "Name"),
-                         dateInput(ns("overall_start_date"), label = "Start of Investment/Liability"),
-                         numericInput(ns("overall_start_balance"), label = "Starting Balance", value = 0),
-                         numericInput(ns("overall_interest_rate"), label = "Annualized Interest Rate", value = 0),
-                         fileInput(ns("input_file_overall"), "Upload Investment/Liability Data")
-                       ), 
-                       DT::dataTableOutput(ns("overall_table"))
-                ),
-                column(6,
-                       inputPanel(
-                         selectInput(ns("event_name"), label = "Name", choices = ""), # This will be filled in with names of overall investments/liabilities
-                         dateInput(ns("event_start_date"), label = "Start Date of Event"),
-                         selectInput(ns("event_recurrence"), label = "Event Recurrence", choices = c("One-Time",
-                                                                                                     "Weekly",
-                                                                                                     "Bi-Weekly",
-                                                                                                     "Monthly",
-                                                                                                     "Quarterly",
-                                                                                                     "Annually")),                             
-                         fileInput(ns("input_file_event"), "Upload Event Data")
-                       ), 
-                      DT::dataTableOutput(ns("overall_table"))
-                       
-                )
-       ),
-       tabPanel("Plots", plotlyOutput(ns("fin_plots"))),
-       tabPanel("Targets", DT::dataTableOutput(ns("fin_targets")))
-     )
+    tabsetPanel(
+      tabPanel("Inputs",
+              column(6,
+                     inputPanel(
+                       textInput(ns("overall_name"), label = "Name"),
+                       dateInput(ns("overall_start_date"), label = "Start of Investment/Liability"),
+                       numericInput(ns("overall_start_balance"), label = "Starting Balance", value = 0),
+                       numericInput(ns("overall_interest_rate"), label = "Annualized Interest Rate", value = 0),
+                       fileInput(ns("input_file_overall"), "Upload Investment/Liability Data")
+                     ), 
+                     DT::dataTableOutput(ns("overall_table"))
+              ),
+              column(6,
+                     inputPanel(
+                       selectInput(ns("event_name"), label = "Name", choices = ""), # This will be filled in with names of overall investments/liabilities
+                       dateInput(ns("event_start_date"), label = "Start Date of Event"),
+                       selectInput(ns("event_recurrence"), label = "Event Recurrence", choices = c("One-Time",
+                                                                                                   "Weekly",
+                                                                                                   "Bi-Weekly",
+                                                                                                   "Monthly",
+                                                                                                   "Quarterly",
+                                                                                                   "Annually")),                             
+                       fileInput(ns("input_file_event"), "Upload Event Data")
+                     ), 
+                    DT::dataTableOutput(ns("event_table"))
+              )
+      ),
+      tabPanel("Plots", plotlyOutput(ns("fin_plots"))),
+      tabPanel("Targets", DT::dataTableOutput(ns("fin_targets")))
+    )
   )
 }
 
@@ -48,19 +47,16 @@ fin_forecast_server <- function(input, output, session) {
   print("fin forecast server started")
   observe({
     print("Updating selectize")
-    
-    if(input$exp_moving_average == F) sel_mav_opts <- c(10, 20, 50, 100, 200)
-    if(input$exp_moving_average == T) sel_mav_opts <- c(12, 26, 52)
-    updateSelectizeInput(session, "sel_mav_width", choices = sel_mav_opts, selected = sel_mav_opts[1], server = TRUE)
-    sel_mav_widths$value <- sel_mav_opts[1]
-    exp_moving_average$value <- input$exp_moving_average
+
+    # updateSelectizeInput(session, "sel_mav_width", choices = sel_mav_opts, selected = sel_mav_opts[1], server = TRUE)
+    # sel_mav_widths$value <- sel_mav_opts[1]
+    # exp_moving_average$value <- input$exp_moving_average
     
     print("Selectize updated")
   })
   
   observe({
-    if(length(input$sel_mav_width) != 0) sel_mav_widths$value <- as.integer(input$sel_mav_width)
-    if(length(input$sel_mav_width) == 0) sel_mav_widths$value <- list()
+    
   })
   
   formatted_prices <- reactive({
