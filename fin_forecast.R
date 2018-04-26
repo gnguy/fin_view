@@ -45,6 +45,11 @@ fin_forecast_ui <- function(id) {
 
 fin_forecast_server <- function(input, output, session) {
   print("fin forecast server started")
+
+  lapply(unique(event_data$event_name), add_event_data, data = data)
+
+  
+  
   observe({
     print("Updating selectize")
 
